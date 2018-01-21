@@ -1,0 +1,17 @@
+[package]
+name = "smol"
+version = "0.1.0"
+authors = ["David Cao <david@teknik.io>"]
+readme = "README.md"
+license = "MIT"
+
+[dependencies]
+failure = "0.1"
+regex = "0.2"
+
+[dev-dependencies]
+criterion = "0.1"
+
+[[bench]]
+name = "benchmark"
+harness = false
