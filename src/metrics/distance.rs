@@ -5,7 +5,9 @@ use std::borrow::Cow;
 use std::mem::{replace, swap};
 
 /// Finds the edit distance between two strings. Popularly known as the Levenshtein
-/// distance. The algorithm used is Enhanced Ukkonen.
+/// distance. The algorithm used is Enhanced Ukkonen
+/// (<http://berghel.net/publications/asm/asm.php>).
+/// Ported from <https://github.com/sunesimonsen/ukkonen>.
 ///
 /// # Arguments
 /// * `a`: the first piece of text to be compared.
@@ -22,12 +24,9 @@ use std::mem::{replace, swap};
 /// assert_eq!(6, ukkonen("", "string", 10));
 /// assert_eq!(3, ukkonen("", "string", 3));
 /// ```
-///
-/// Algorithm from <http://berghel.net/publications/asm/asm.php>.
-/// Ported from <https://github.com/sunesimonsen/ukkonen>.
 pub fn ukkonen<'a, S>(a: S, b: S, threshold: usize) -> usize
 where
-    S: PartialEq + Into<Cow<'a, str>>
+    S: PartialEq + Into<Cow<'a, str>>,
 {
     if a == b {
         return 0;

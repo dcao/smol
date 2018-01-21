@@ -27,9 +27,9 @@ pub trait Tokenizer<'a> {
 /// A single token.
 pub struct Token<'a> {
     /// The term of text of the token itself.
-    term: Cow<'a, str>,
+    pub term: Cow<'a, str>,
     /// The starting byte offset of the token in the overall string.
-    offset: usize,
+    pub offset: usize,
     /// The index of the token amongst all tokens in the iterator.
-    index: usize,
+    pub index: usize,
 }
