@@ -12,7 +12,7 @@ pub struct RegexTokenIter<'a> {
 }
 
 impl<'a> RegexTokenIter<'a> {
-    fn new(input: &'a str, pattern: &str) -> RegexTokenIter<'a> {
+    pub fn new(input: &'a str, pattern: &str) -> RegexTokenIter<'a> {
         // TODO: Gracefully error
         let r = Regex::new(pattern).unwrap();
         RegexTokenIter {
@@ -37,17 +37,5 @@ impl<'a> Iterator for RegexTokenIter<'a> {
             offset: m.start(),
             index: self.index - 1,
         })
-    }
-}
-
-/// A tokenizer which uses regular expressions to split a string into alphabetic and
-/// non-alphabetic tokens
-pub struct RegexWordPunctTokenizer;
-
-impl<'a> Tokenizer<'a> for RegexWordPunctTokenizer {
-    type TokenIter = RegexTokenIter<'a>;
-
-    fn tokenize(&self, input: &'a str) -> Self::TokenIter {
-        RegexTokenIter::new(input, r"\w+|[^\w\s]+")
     }
 }

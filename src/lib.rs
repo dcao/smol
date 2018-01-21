@@ -3,7 +3,7 @@ extern crate regex;
 
 pub mod metrics;
 pub mod tokenize;
-pub mod pos;
+pub mod tag;
 
 #[cfg(test)]
 mod tests {}

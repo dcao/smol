@@ -7,10 +7,12 @@
 // TODO: Should input types be Cow?
 
 pub mod chr;
+pub mod word;
 pub mod regex;
 
 // Re-exports
 pub use self::chr::*;
+pub use self::word::*;
 pub use self::regex::*;
 
 use std::borrow::Cow;
@@ -25,7 +27,9 @@ pub trait Tokenizer<'a> {
 }
 
 /// A single token.
+#[derive(Clone)]
 pub struct Token<'a> {
+    // TODO: Maybe just give start/end offset? Make getting text a method
     /// The term of text of the token itself.
     pub term: Cow<'a, str>,
     /// The starting byte offset of the token in the overall string.
