@@ -1,8 +1,9 @@
-mod perceptron;
+pub mod perceptron;
+
+// Re-exports
+pub use self::perceptron::*;
 
 use tokenize::*;
-
-pub use self::perceptron::*;
 
 /// A part-of-speech tagger.
 pub trait Tagger<'a> {

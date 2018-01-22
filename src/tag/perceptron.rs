@@ -3,12 +3,12 @@
 use super::*;
 
 use std::collections::{HashMap, HashSet};
+use std::borrow::Cow;
 
 pub struct AveragedPerceptron {
     classes: HashSet<String>,
     instances: usize,
     stamps: HashMap<String, f64>,
-    tags: HashMap<String, String>,
     totals: HashMap<String, f64>,
     weights: HashMap<String, HashMap<String, f64>>,
 }
@@ -23,7 +23,6 @@ impl AveragedPerceptron {
             classes: classes,
             instances: 0,
             stamps: HashMap::new(),
-            tags: tags,
             totals: HashMap::new(),
             weights: weights,
         }
@@ -101,7 +100,76 @@ impl AveragedPerceptron {
 
 struct PerceptronTagger {
     tags: HashMap<String, String>,
+    classes: HashSet<String>,
     model: AveragedPerceptron,
 }
 
-impl PerceptronTagger {}
+impl PerceptronTagger {
+    // TODO: Return Token<'a>, String
+    pub fn tag<'a>(&mut self, words: &[Token<'a>]) -> Vec<(String, String)> {
+        let mut res = vec!();
+
+        let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
+        let end = vec!["-END-".to_owned(), "-END2-".to_owned()];
+        let mut context = vec![p1.clone(), p2.clone()];
+        // TODO: Maybe prolly use Vec<Token<'a>>
+        context.extend(
+            words
+                .iter()
+                .map(|x| self.normalize(x))
+                .map(|x| x.term.into_owned())
+                .collect::<Vec<_>>(),
+        );
+        context.extend(end.clone());
+
+        // TODO: clean is probably where we should leave it as Token
+        let mut clean = vec![p1.clone(), p2.clone()];
+        clean.extend(
+            words
+                .iter()
+                .map(|x| x.term.clone().into_owned())
+                .collect::<Vec<_>>(),
+        );
+        context.extend(end.clone());
+
+        for (i, word) in clean.iter().enumerate() {
+            let tag = match self.tags.get(word) {
+                Some(s) => s.clone(),
+                None => {
+                    let features = Self::get_features(i, &context, word, &p1, &p2);
+                    self.model.predict(features)
+                }
+            };
+
+            res.push((word.clone(), tag.clone()));
+            p2 = p1;
+            p1 = tag;
+        }
+
+        res
+    }
+
+    fn get_features(i: usize, context: &[String], w: &str, p1: &str, p2: &str) -> HashMap<String, f64> {
+        unimplemented!()
+    }
+
+    fn normalize<'a>(&self, t: &Token<'a>) -> Token<'a> {
+        let text = if t.term.find('-').is_some() && t.term.chars().nth(0) != Some('-') {
+            Cow::Borrowed("!HYPHEN")
+        } else if t.term.parse::<usize>().is_ok() {
+            if t.term.chars().count() == 4 {
+                Cow::Borrowed("!YEAR")
+            } else {
+                Cow::Borrowed("!DIGIT")
+            }
+        } else {
+            Cow::Owned(t.term.to_lowercase())
+        };
+
+        Token {
+            term: text,
+            offset: t.offset,
+            index: t.index,
+        }
+    }
+}
