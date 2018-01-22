@@ -16,7 +16,6 @@ pub struct AveragedPerceptron {
 impl AveragedPerceptron {
     pub fn new(
         weights: HashMap<String, HashMap<String, f64>>,
-        tags: HashMap<String, String>,
         classes: HashSet<String>,
     ) -> AveragedPerceptron {
         AveragedPerceptron {
@@ -98,7 +97,7 @@ impl AveragedPerceptron {
     }
 }
 
-struct PerceptronTagger {
+pub struct PerceptronTagger {
     tags: HashMap<String, String>,
     classes: HashSet<String>,
     model: AveragedPerceptron,
