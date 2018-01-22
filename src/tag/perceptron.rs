@@ -36,7 +36,7 @@ impl AveragedPerceptron {
             }
             let weights = &self.weights[&feat];
             for (label, weight) in weights {
-                *scores.entry(label.clone()).or_insert(0.0) += (*weight as f64 * val) as f64;
+                *scores.entry(label.to_string()).or_insert(0.0) += (*weight as f64 * val) as f64;
             }
         }
 
@@ -74,11 +74,11 @@ impl AveragedPerceptron {
             let mut new: HashMap<String, f64> = HashMap::new();
             for (class, weight) in weights.clone() {
                 let key = format!("{}-{}", feat, class);
-                let total = self.totals.entry(key.clone()).or_insert(0.0);
+                let total = self.totals.entry(key.to_string()).or_insert(0.0);
                 *total += (self.instances as f64 - self.stamps[&key]) * weight;
                 let averaged = (*total / (self.instances as f64) * 1000.0).round() / 1000.0;
                 if averaged != 0.0 {
-                    new.insert(class.clone(), averaged);
+                    new.insert(class.to_string(), averaged);
                 }
             }
             *weights = new;
@@ -87,11 +87,11 @@ impl AveragedPerceptron {
 
     fn update_feat(&mut self, c: &str, f: &str, v: f64, w: f64) {
         let key = format!("{}-{}", c, f);
-        *self.totals.entry(key.clone()).or_insert(0.0) =
+        *self.totals.entry(key.to_string()).or_insert(0.0) =
             (self.instances as f64 - self.stamps[&key]) * w;
-        *self.stamps.entry(key.clone()).or_insert(0.0) = self.instances as f64;
+        *self.stamps.entry(key.to_string()).or_insert(0.0) = self.instances as f64;
         *self.weights
-            .entry(key.clone())
+            .entry(key.to_string())
             .or_insert_with(HashMap::new)
             .entry(c.to_owned())
             .or_insert(0.0) = w + v;
@@ -134,14 +134,14 @@ impl PerceptronTagger {
 
         for (i, word) in clean.iter().enumerate() {
             let tag = match self.tags.get(word) {
-                Some(s) => s.clone(),
+                Some(s) => s.to_string(),
                 None => {
                     let features = Self::get_features(i, &context, word, &p1, &p2);
                     self.model.predict(features)
                 }
             };
 
-            res.push((word.clone(), tag.clone()));
+            res.push((word.to_string(), tag.to_string()));
             p2 = p1;
             p1 = tag;
         }
