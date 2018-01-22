@@ -2,6 +2,8 @@
 
 use super::*;
 
+use itertools::Itertools;
+use std::cmp::min;
 use std::collections::{HashMap, HashSet};
 use std::borrow::Cow;
 
@@ -106,7 +108,7 @@ pub struct PerceptronTagger {
 impl PerceptronTagger {
     // TODO: Return Token<'a>, String
     pub fn tag<'a>(&mut self, words: &[Token<'a>]) -> Vec<(String, String)> {
-        let mut res = vec!();
+        let mut res = vec![];
 
         let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
         let end = vec!["-END-".to_owned(), "-END2-".to_owned()];
@@ -148,8 +150,44 @@ impl PerceptronTagger {
         res
     }
 
-    fn get_features(i: usize, context: &[String], w: &str, p1: &str, p2: &str) -> HashMap<String, f64> {
-        unimplemented!()
+    fn get_features(
+        i: usize,
+        context: &[String],
+        w: &str,
+        p1: &str,
+        p2: &str,
+    ) -> HashMap<String, f64> {
+        let w = w.chars().collect::<Vec<_>>();
+        let suf = min(w.len(), 3);
+        let i = min(context.len() - 2, i + 2);
+        let iminus = min(context[i - 1].len(), 3);
+        let iplus = min(context[i + 1].len(), 3);
+
+        let mut res = HashMap::new();
+        Self::add_feature(&["bias"], &mut res);
+        Self::add_feature(
+            &["i suffix", &w[w.len() - suf..].iter().collect::<String>()],
+            &mut res,
+        );
+        Self::add_feature(&["i pref1", &w[0].to_string()], &mut res);
+        Self::add_feature(&["i-1 tag", p1], &mut res);
+        Self::add_feature(&["i-2 tag", p2], &mut res);
+        Self::add_feature(&["i tag+i-2 tag", p1, p2], &mut res);
+        Self::add_feature(&["i word", &context[i]], &mut res);
+        Self::add_feature(&["i-1 tag+i word", p1, &context[i]], &mut res);
+        Self::add_feature(&["i-1 word", &context[i - 1]], &mut res);
+        Self::add_feature(&["i-1 suffix", &context[i - 1][context[i - 1].len() - iminus..]], &mut res);
+        Self::add_feature(&["i-2 word", &context[i - 2]], &mut res);
+        Self::add_feature(&["i+1 word", &context[i + 1]], &mut res);
+        Self::add_feature(&["i+1 suffix", &context[i - 1][context[i - 1].len() - iplus..]], &mut res);
+        Self::add_feature(&["i+2 word", &context[i + 2]], &mut res);
+        
+        res
+    }
+
+    fn add_feature(args: &[&str], features: &mut HashMap<String, f64>) {
+        let key = args.iter().join(" ");
+        *features.entry(key).or_insert(0.0) += 1.0;
     }
 
     fn normalize<'a>(&self, t: &Token<'a>) -> Token<'a> {
