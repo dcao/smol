@@ -1,4 +1,8 @@
 //! An averaged perceptron part of speech tagger
+//! Code adapted from [NLTK](http://www.nltk.org/_modules/nltk/tag/perceptron.html) and
+//! [prose](https://github.com/jdkato/prose/blob/master/tag/aptag.go).
+//!
+//! Based on [an algorithm by Matthew Honnibal](https://github.com/jdkato/prose/blob/master/tag/aptag.go)
 
 use super::*;
 
@@ -119,10 +123,13 @@ pub struct PerceptronTagger {
 
 impl PerceptronTagger {
     pub fn save(&self, path: &str) -> Result<(), Error> {
-        let s = serialize(&(&self.model.weights, &self.tags, &self.model.classes), Infinite)?;
+        let s = serialize(
+            &(&self.model.weights, &self.tags, &self.model.classes),
+            Infinite,
+        )?;
         let p = Path::new(path);
         let mut f = File::create(p)?;
-        
+
         f.write_all(&s)?;
 
         Ok(())
@@ -249,7 +256,7 @@ impl PerceptronTagger {
             for &(ref word, ref tag) in *sentence {
                 let hm = counts.entry(word).or_insert_with(HashMap::new);
                 *hm.entry(tag).or_insert(0) += 1;
-                self.model.classes.insert(tag.clone());
+                self.model.classes.insert(tag.to_string());
             }
         }
         for (word, tag_freq) in counts {
