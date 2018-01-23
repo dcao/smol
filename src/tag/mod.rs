@@ -25,7 +25,7 @@ impl<'a, K: Tokenizer<'a>, G: Tagger<'a>> Pipeline<K, G> {
         }
     }
 
-    pub fn pos(&self, input: &'a str) -> G::TagIter {
+    pub fn pos(&self, input: &'a str) -> Vec<(Token<'a>, G::Tag)> {
         self.tagger.tag(self.tokenizer.tokenize(input))
     }
 

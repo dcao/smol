@@ -115,7 +115,7 @@ impl PerceptronTagger {
     pub fn new() -> PerceptronTagger {
         PerceptronTagger {
             model: AveragedPerceptron::empty(),
-            tags: HashMap::new()
+            tags: HashMap::new(),
         }
     }
 
@@ -305,13 +305,5 @@ impl PerceptronTagger {
         } else {
             Cow::Owned(t.to_lowercase())
         }
-    }
-}
-
-impl<'a> Tagger<'a> for PerceptronTagger {
-    type Tag = String;
-
-    fn tag<I: Iterator<Item = Token<'a>>>(&self, tokens: I) -> Vec<(Token<'a>, Self::Tag)> {
-        self.tag(tokens.collect())
     }
 }
