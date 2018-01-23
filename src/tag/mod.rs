@@ -8,10 +8,8 @@ use tokenize::*;
 /// A part-of-speech tagger.
 pub trait Tagger<'a> {
     type Tag;
-    // Should this just be anything which can turn into an iterator of these things
-    type TagIter: Iterator<Item = (Token<'a>, Self::Tag)>;
 
-    fn tag<I: Iterator<Item = Token<'a>>>(&self, tokens: I) -> Self::TagIter;
+    fn tag<I: Iterator<Item = Token<'a>>>(&self, tokens: I) -> Vec<(Token<'a>, Self::Tag)>;
 }
 
 pub struct Pipeline<K, G> {

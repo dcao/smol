@@ -3,9 +3,12 @@
 use super::*;
 
 use itertools::Itertools;
+use rand::{thread_rng, Rng};
 use std::cmp::min;
 use std::collections::{HashMap, HashSet};
 use std::borrow::Cow;
+
+type TaggedSentences<'a> = &'a [&'a [(String, String)]];
 
 pub struct AveragedPerceptron {
     classes: HashSet<String>,
@@ -16,6 +19,10 @@ pub struct AveragedPerceptron {
 }
 
 impl AveragedPerceptron {
+    pub fn empty() -> AveragedPerceptron {
+        AveragedPerceptron::new(HashMap::new(), HashSet::new())
+    }
+
     pub fn new(
         weights: HashMap<String, HashMap<String, f64>>,
         classes: HashSet<String>,
@@ -29,13 +36,13 @@ impl AveragedPerceptron {
         }
     }
 
-    pub fn predict(&self, features: HashMap<String, f64>) -> String {
+    pub fn predict(&self, features: &HashMap<String, f64>) -> String {
         let mut scores: HashMap<String, f64> = HashMap::new();
         for (feat, val) in features {
-            if self.weights.get(&feat).is_none() || val == 0.0 {
+            if self.weights.get(feat).is_none() || *val == 0.0 {
                 continue;
             }
-            let weights = &self.weights[&feat];
+            let weights = &self.weights[feat];
             for (label, weight) in weights {
                 *scores.entry(label.to_string()).or_insert(0.0) += (*weight as f64 * val) as f64;
             }
@@ -43,7 +50,7 @@ impl AveragedPerceptron {
 
         self.classes
             .iter()
-            .map(|i| (scores[i] * 100000.0) as usize)
+            .map(|i| (scores[i] * 100000.0) as isize)
             .zip(self.classes.iter())
             .max()
             .unwrap()
@@ -100,20 +107,24 @@ impl AveragedPerceptron {
 }
 
 pub struct PerceptronTagger {
-    tags: HashMap<String, String>,
-    classes: HashSet<String>,
     model: AveragedPerceptron,
+    tags: HashMap<String, String>,
 }
 
 impl PerceptronTagger {
-    // TODO: Return Token<'a>, String
-    pub fn tag<'a>(&mut self, words: &[Token<'a>]) -> Vec<(String, String)> {
+    pub fn new() -> PerceptronTagger {
+        PerceptronTagger {
+            model: AveragedPerceptron::empty(),
+            tags: HashMap::new()
+        }
+    }
+
+    pub fn tag<'a>(&mut self, words: &[Token<'a>]) -> Vec<(Token<'a>, String)> {
         let mut res = vec![];
 
         let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
         let end = vec!["-END-".to_owned(), "-END2-".to_owned()];
         let mut context = vec![p1.clone(), p2.clone()];
-        // TODO: Maybe prolly use Vec<Token<'a>>
         context.extend(
             words
                 .iter()
@@ -123,7 +134,6 @@ impl PerceptronTagger {
         );
         context.extend(end.clone());
 
-        // TODO: clean is probably where we should leave it as Token
         let mut clean = vec![p1.clone(), p2.clone()];
         clean.extend(
             words
@@ -138,16 +148,87 @@ impl PerceptronTagger {
                 Some(s) => s.to_string(),
                 None => {
                     let features = Self::get_features(i, &context, word, &p1, &p2);
-                    self.model.predict(features)
+                    self.model.predict(&features)
                 }
             };
 
-            res.push((word.to_string(), tag.to_string()));
+            if word != "-START-" || word != "-START2-" || word != "-END-" || word != "-END2-" {
+                let t = Token {
+                    term: word.to_string().into(),
+                    offset: words[i - 2].offset,
+                    index: words[i - 2].index,
+                };
+
+                res.push((t, tag.to_string()));
+            }
             p2 = p1;
             p1 = tag;
         }
 
         res
+    }
+
+    // TODO: How to ensure we have sentences
+    pub fn train<'a>(&mut self, sentences: TaggedSentences<'a>, iterations: usize) {
+        self.make_tags(&sentences);
+        let mut ss = sentences.to_owned();
+        for _ in 0..iterations {
+            for sentence in &ss {
+                let (words, tags): (Vec<_>, Vec<_>) = sentence.iter().cloned().unzip();
+                let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
+                let end = vec!["-END-".to_owned(), "-END2-".to_owned()];
+                let mut context = vec![p1.clone(), p2.clone()];
+                context.extend(
+                    words
+                        .iter()
+                        .map(|x| self.normalize_str(x))
+                        .map(|x| x.into_owned())
+                        .collect::<Vec<_>>(),
+                );
+                context.extend(end.clone());
+
+                for (i, word) in words.iter().enumerate() {
+                    let guess = match self.tags.get(word) {
+                        Some(s) => s.clone(),
+                        None => {
+                            let features = Self::get_features(i, &context, word, &p1, &p2);
+                            let g = self.model.predict(&features);
+                            self.model.update(&tags[i], &g, features);
+                            g
+                        }
+                    };
+
+                    p2 = p1;
+                    p1 = guess;
+                }
+            }
+            let mut rng = thread_rng();
+            rng.shuffle(&mut ss);
+        }
+        self.model.average_weights();
+    }
+
+    // TODO: How to ensure we have sentences
+    fn make_tags<'a>(&mut self, sentences: &TaggedSentences<'a>) {
+        let mut counts: HashMap<&str, HashMap<&str, usize>> = HashMap::new();
+        for sentence in *sentences {
+            for &(ref word, ref tag) in *sentence {
+                let hm = counts.entry(word).or_insert_with(HashMap::new);
+                *hm.entry(tag).or_insert(0) += 1;
+                self.model.classes.insert(tag.clone());
+            }
+        }
+        for (word, tag_freq) in counts {
+            let (tag, mode) = tag_freq.iter().max().unwrap();
+            let n = tag_freq.iter().map(|x| x.1).fold(0, |acc, &x| acc + x) as f64;
+
+            let freq_thresh = 20.0;
+            let ambiguity_thresh = 0.97;
+
+            if n >= freq_thresh && (*mode as f64 / n) >= ambiguity_thresh {
+                self.tags.insert(word.to_string(), tag.to_string());
+            }
+        }
     }
 
     fn get_features(
@@ -176,12 +257,24 @@ impl PerceptronTagger {
         Self::add_feature(&["i word", &context[i]], &mut res);
         Self::add_feature(&["i-1 tag+i word", p1, &context[i]], &mut res);
         Self::add_feature(&["i-1 word", &context[i - 1]], &mut res);
-        Self::add_feature(&["i-1 suffix", &context[i - 1][context[i - 1].len() - iminus..]], &mut res);
+        Self::add_feature(
+            &[
+                "i-1 suffix",
+                &context[i - 1][context[i - 1].len() - iminus..],
+            ],
+            &mut res,
+        );
         Self::add_feature(&["i-2 word", &context[i - 2]], &mut res);
         Self::add_feature(&["i+1 word", &context[i + 1]], &mut res);
-        Self::add_feature(&["i+1 suffix", &context[i - 1][context[i - 1].len() - iplus..]], &mut res);
+        Self::add_feature(
+            &[
+                "i+1 suffix",
+                &context[i - 1][context[i - 1].len() - iplus..],
+            ],
+            &mut res,
+        );
         Self::add_feature(&["i+2 word", &context[i + 2]], &mut res);
-        
+
         res
     }
 
@@ -191,22 +284,34 @@ impl PerceptronTagger {
     }
 
     fn normalize<'a>(&self, t: &Token<'a>) -> Token<'a> {
-        let text = if t.term.find('-').is_some() && t.term.chars().nth(0) != Some('-') {
-            Cow::Borrowed("!HYPHEN")
-        } else if t.term.parse::<usize>().is_ok() {
-            if t.term.chars().count() == 4 {
-                Cow::Borrowed("!YEAR")
-            } else {
-                Cow::Borrowed("!DIGIT")
-            }
-        } else {
-            Cow::Owned(t.term.to_lowercase())
-        };
+        let text = self.normalize_str(t.term.as_ref());
 
         Token {
             term: text,
             offset: t.offset,
             index: t.index,
         }
+    }
+
+    fn normalize_str<'a>(&self, t: &str) -> Cow<'a, str> {
+        if t.find('-').is_some() && t.chars().nth(0) != Some('-') {
+            Cow::Borrowed("!HYPHEN")
+        } else if t.parse::<usize>().is_ok() {
+            if t.chars().count() == 4 {
+                Cow::Borrowed("!YEAR")
+            } else {
+                Cow::Borrowed("!DIGIT")
+            }
+        } else {
+            Cow::Owned(t.to_lowercase())
+        }
+    }
+}
+
+impl<'a> Tagger<'a> for PerceptronTagger {
+    type Tag = String;
+
+    fn tag<I: Iterator<Item = Token<'a>>>(&self, tokens: I) -> Vec<(Token<'a>, Self::Tag)> {
+        self.tag(tokens.collect())
     }
 }
