@@ -83,7 +83,7 @@ impl AveragedPerceptron {
             for (class, weight) in weights.clone() {
                 let key = format!("{}-{}", feat, class);
                 let total = self.totals.entry(key.to_string()).or_insert(0.0);
-                *total += (self.instances as f64 - self.stamps[&key]) * weight;
+                *total += (self.instances as f64 - *self.stamps.entry(key).or_insert(0.0)) * weight;
                 let averaged = (*total / (self.instances as f64) * 1000.0).round() / 1000.0;
                 if averaged != 0.0 {
                     new.insert(class.to_string(), averaged);
@@ -96,7 +96,7 @@ impl AveragedPerceptron {
     fn update_feat(&mut self, c: &str, f: &str, v: f64, w: f64) {
         let key = format!("{}-{}", c, f);
         *self.totals.entry(key.to_string()).or_insert(0.0) =
-            (self.instances as f64 - self.stamps[&key]) * w;
+            (self.instances as f64 - *self.stamps.entry(key.to_string()).or_insert(0.0)) * w;
         *self.stamps.entry(key.to_string()).or_insert(0.0) = self.instances as f64;
         *self.weights
             .entry(key.to_string())
