@@ -48,10 +48,9 @@ impl AveragedPerceptron {
             }
         }
 
-        self.classes
+        scores
             .iter()
-            .map(|i| (scores[i] * 100000.0) as isize)
-            .zip(self.classes.iter())
+            .map(|i| ((i.1 * 100000.0) as isize, i.0))
             .max()
             .unwrap()
             .1
