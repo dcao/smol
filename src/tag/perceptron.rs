@@ -2,14 +2,20 @@
 
 use super::*;
 
+use bincode::{deserialize, serialize, Infinite};
+use failure::Error;
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
 use std::cmp::min;
 use std::collections::{HashMap, HashSet};
 use std::borrow::Cow;
+use std::io::prelude::*;
+use std::fs::File;
+use std::path::Path;
 
 type TaggedSentences<'a> = &'a [&'a [(String, String)]];
 
+#[derive(Deserialize, Serialize, Debug)]
 pub struct AveragedPerceptron {
     classes: HashSet<String>,
     instances: usize,
@@ -105,13 +111,42 @@ impl AveragedPerceptron {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug)]
 pub struct PerceptronTagger {
     model: AveragedPerceptron,
     tags: HashMap<String, String>,
 }
 
 impl PerceptronTagger {
-    pub fn new() -> PerceptronTagger {
+    pub fn save(&self, path: &str) -> Result<(), Error> {
+        let s = serialize(&(&self.model.weights, &self.tags, &self.model.classes), Infinite)?;
+        let p = Path::new(path);
+        let mut f = File::create(p)?;
+        
+        f.write_all(&s)?;
+
+        Ok(())
+    }
+
+    pub fn load(path: &str) -> Result<PerceptronTagger, Error> {
+        let p = Path::new(path);
+        let mut f = File::open(p)?;
+
+        let mut s = String::new();
+        f.read_to_string(&mut s)?;
+        let (weights, tags, classes) = deserialize(s.as_bytes())?;
+
+        let m = AveragedPerceptron::new(weights, classes);
+
+        let p = PerceptronTagger {
+            model: m,
+            tags: tags,
+        };
+
+        Ok(p)
+    }
+
+    pub fn empty() -> PerceptronTagger {
         PerceptronTagger {
             model: AveragedPerceptron::empty(),
             tags: HashMap::new(),
