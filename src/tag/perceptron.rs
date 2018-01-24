@@ -54,7 +54,9 @@ impl AveragedPerceptron {
             }
             let weights = &self.weights[feat];
             for (label, weight) in weights {
-                *scores.entry(label.to_string()).or_insert(0.0) += (*weight as f64 * val) as f64;
+                scores.get_mut(label)
+                    .map(|w| *w += (*weight as f64 * val) as f64)
+                    .unwrap_or_else(|| { scores.insert(label.to_owned(), (*weight as f64 * val) as f64); });
             }
         }
 
@@ -86,8 +88,7 @@ impl AveragedPerceptron {
     }
 
     pub fn average_weights(&mut self) {
-        let w2 = &mut self.weights;
-        for (feat, weights) in w2 {
+        for (feat, weights) in &mut self.weights {
             let mut new: HashMap<String, f64> = HashMap::new();
             for (class, weight) in weights.clone() {
                 let key = format!("{}-{}", feat, class);
@@ -110,7 +111,7 @@ impl AveragedPerceptron {
         *self.weights
             .entry(key.to_string())
             .or_insert_with(HashMap::new)
-            .entry(c.to_owned())
+            .entry(c.to_string())
             .or_insert(0.0) = w + v;
     }
 }
@@ -160,7 +161,7 @@ impl PerceptronTagger {
         }
     }
 
-    pub fn tag<'a>(&mut self, words: &[Token<'a>]) -> Vec<(Token<'a>, String)> {
+    pub fn pos(&mut self, words: &[Token]) -> Vec<(Token, String)> {
         let mut res = vec![];
 
         let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
@@ -210,7 +211,7 @@ impl PerceptronTagger {
     }
 
     // TODO: How to ensure we have sentences
-    pub fn train<'a>(&mut self, sentences: TaggedSentences<'a>, iterations: usize) {
+    pub fn train(&mut self, sentences: TaggedSentences, iterations: usize) {
         self.make_tags(&sentences);
         let mut ss = sentences.to_owned();
         for _ in 0..iterations {
@@ -250,7 +251,7 @@ impl PerceptronTagger {
     }
 
     // TODO: How to ensure we have sentences
-    fn make_tags<'a>(&mut self, sentences: &TaggedSentences<'a>) {
+    fn make_tags(&mut self, sentences: &TaggedSentences) {
         let mut counts: HashMap<&str, HashMap<&str, usize>> = HashMap::new();
         for sentence in *sentences {
             for &(ref word, ref tag) in *sentence {
@@ -324,7 +325,7 @@ impl PerceptronTagger {
         *features.entry(key).or_insert(0.0) += 1.0;
     }
 
-    fn normalize<'a>(&self, t: &Token<'a>) -> Token<'a> {
+    fn normalize(&self, t: &Token) -> Token {
         let text = self.normalize_str(t.term.as_ref());
 
         Token {
@@ -346,5 +347,13 @@ impl PerceptronTagger {
         } else {
             Cow::Owned(t.to_lowercase())
         }
+    }
+}
+
+impl Tagger for PerceptronTagger {
+    type Tag = String;
+
+    fn tag(&mut self, tokens: &[Token]) -> Vec<(Token, Self::Tag)> {
+        self.pos(&tokens[..])
     }
 }
