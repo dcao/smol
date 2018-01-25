@@ -223,7 +223,7 @@ impl PerceptronTagger {
                 .map(|x| x.term.clone().into_owned())
                 .collect::<Vec<_>>(),
         );
-        context.extend(end.clone());
+        clean.extend(end.clone());
 
         for (i, word) in clean.iter().enumerate() {
             let tag = match self.tags.get(word) {
