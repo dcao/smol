@@ -92,12 +92,23 @@ impl AveragedPerceptron {
     }
 
     pub fn average_weights(&mut self) {
+        let stamps = &mut self.stamps;
         for (feat, weights) in &mut self.weights {
             let mut new: HashMap<String, f64> = HashMap::new();
             for (class, weight) in weights.clone() {
                 let key = format!("{}-{}", feat, class);
-                let total = self.totals.entry(key.to_string()).or_insert(0.0);
-                *total += (self.instances as f64 - *self.stamps.entry(key).or_insert(0.0)) * weight;
+                let delta = stamps.get_mut(&key)
+                    .and_then(|v| {
+                        Some(*v)
+                    })
+                    .or_else(|| {
+                        let v = stamps.insert(key.to_owned(), 0.0).unwrap();
+                        Some(v)
+                    })
+                    .unwrap();
+
+                let total = self.totals.entry(key).or_insert(0.0);
+                *total += (self.instances as f64 - delta) * weight;
                 let averaged = (*total / (self.instances as f64) * 1000.0).round() / 1000.0;
                 if averaged != 0.0 {
                     new.insert(class.to_string(), averaged);
