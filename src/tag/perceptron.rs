@@ -76,14 +76,18 @@ impl AveragedPerceptron {
         }
 
         for (f, _) in features {
-            // TODO: Inefficient yo
-            let weights = match self.weights.get(&f) {
-                Some(x) => x.clone(),
-                None => HashMap::new(),
-            };
-            self.update_feat(truth, f.as_ref(), *weights.get(truth).unwrap_or(&0.0), 1.0);
-            self.update_feat(guess, f.as_ref(), *weights.get(guess).unwrap_or(&0.0), -1.0);
-            *self.weights.entry(f).or_insert_with(HashMap::new) = weights;
+            self.weights.get(&f)
+                .and_then(|weights| Some((*weights.get(truth).unwrap_or(&0.0), *weights.get(guess).unwrap_or(&0.0))))
+                .and_then(|weights| {
+                    self.update_feat(truth, f.as_ref(), weights.0, 1.0);
+                    self.update_feat(guess, f.as_ref(), weights.1, -1.0);
+                    Some(())
+                })
+                .or_else(|| {
+                    self.update_feat(truth, f.as_ref(), 0.0, 1.0);
+                    self.update_feat(guess, f.as_ref(), 0.0, -1.0);
+                    Some(())
+                });
         }
     }
 
@@ -105,14 +109,40 @@ impl AveragedPerceptron {
 
     fn update_feat(&mut self, c: &str, f: &str, v: f64, w: f64) {
         let key = format!("{}-{}", c, f);
-        *self.totals.entry(key.to_string()).or_insert(0.0) =
-            (self.instances as f64 - *self.stamps.entry(key.to_string()).or_insert(0.0)) * w;
-        *self.stamps.entry(key.to_string()).or_insert(0.0) = self.instances as f64;
-        *self.weights
-            .entry(key.to_string())
+
+        // TODO: Right now we're accessing the HashMap twice for everything so that we don't have
+        // to constantly copy strings
+        // Maybe there's a better way...
+        self.totals.get_mut(&key)
+            .and_then(|_| Some(()))
+            .or_else(|| {
+                self.totals.insert(key.to_owned(), 0.0);
+                Some(())
+            });
+
+        let delta = self.stamps.get_mut(&key)
+            .and_then(|v| {
+                Some(*v)
+            })
+            .or_else(|| {
+                let v = self.stamps.insert(key.to_owned(), 0.0).unwrap();
+                Some(v)
+            })
+            .unwrap();
+
+        *self.totals.get_mut(&key).unwrap() += (self.instances as f64 - delta) * w;
+        *self.stamps.get_mut(&key).unwrap() = self.instances as f64;
+        self.weights
+            .entry(key)
             .or_insert_with(HashMap::new)
-            .entry(c.to_string())
-            .or_insert(0.0) = w + v;
+            .get_mut(c)
+            .and_then(|val| {
+                *val = w + v;
+                Some(())
+            })
+            .or_else(|| {
+                Some(())
+            });
     }
 }
 
