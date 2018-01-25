@@ -206,30 +206,27 @@ impl PerceptronTagger {
 
         let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
         let end = vec![String::from("-END-"), String::from("-END2-")];
-        let mut context = vec![p1.clone(), p2.clone()];
-        context.extend(
-            words
-                .iter()
-                .map(|x| self.normalize(x))
-                .map(|x| x.term.into_owned())
-                .collect::<Vec<_>>(),
-        );
-        context.extend(end.clone());
+        let context = vec![p1.clone(), p2.clone()]
+            .into_iter()
+            .chain(
+                words
+                    .iter()
+                    .map(|x| self.normalize(x))
+                    .map(|x| x.term.into_owned()),
+            )
+            .chain(end.clone().into_iter())
+            .collect::<Vec<_>>();
 
-        let mut clean = vec![p1.clone(), p2.clone()];
-        clean.extend(
-            words
-                .iter()
-                .map(|x| x.term.clone().into_owned())
-                .collect::<Vec<_>>(),
-        );
-        clean.extend(end.clone());
+        let clean = vec![p1.clone(), p2.clone()]
+            .into_iter()
+            .chain(words.iter().cloned().map(|x| x.term.into_owned()))
+            .chain(end.into_iter());
 
-        for (i, word) in clean.iter().enumerate() {
-            let tag = match self.tags.get(word) {
+        for (i, word) in clean.enumerate() {
+            let tag = match self.tags.get(&word) {
                 Some(s) => s.to_string(),
                 None => {
-                    let features = Self::get_features(i, &context, word, &p1, &p2);
+                    let features = Self::get_features(i, &context, &word, &p1, &p2);
                     self.model.predict(&features)
                 }
             };
@@ -259,15 +256,17 @@ impl PerceptronTagger {
                 let (words, tags): (Vec<_>, Vec<_>) = sentence.iter().cloned().unzip();
                 let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
                 let end = vec![String::from("-END-"), String::from("-END2-")];
-                let mut context = vec![p1.clone(), p2.clone()];
-                context.extend(
-                    words
-                        .iter()
-                        .map(|x| self.normalize_str(x))
-                        .map(|x| x.into_owned())
-                        .collect::<Vec<_>>(),
-                );
-                context.extend(end.clone());
+
+                let context = vec![p1.clone(), p2.clone()]
+                    .into_iter()
+                    .chain(
+                        words
+                            .iter()
+                            .map(|x| self.normalize_str(x))
+                            .map(|x| x.into_owned()),
+                    )
+                    .chain(end.into_iter())
+                    .collect::<Vec<_>>();
 
                 for (i, word) in words.iter().enumerate() {
                     let guess = match self.tags.get(word) {
