@@ -17,9 +17,7 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
 
-type TaggedSentences<'a> = &'a [&'a [(String, String)]];
-
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct AveragedPerceptron {
     classes: HashSet<String>,
     instances: usize,
@@ -29,21 +27,18 @@ pub struct AveragedPerceptron {
 }
 
 impl AveragedPerceptron {
-    pub fn empty() -> AveragedPerceptron {
-        AveragedPerceptron::new(HashMap::new(), HashSet::new())
+    pub fn new() -> AveragedPerceptron {
+        AveragedPerceptron::default()
     }
 
-    pub fn new(
-        weights: HashMap<String, HashMap<String, f64>>,
-        classes: HashSet<String>,
-    ) -> AveragedPerceptron {
-        AveragedPerceptron {
-            classes: classes,
-            instances: 0,
-            stamps: HashMap::new(),
-            totals: HashMap::new(),
-            weights: weights,
-        }
+    pub fn weights(mut self, weights: HashMap<String, HashMap<String, f64>>) -> AveragedPerceptron {
+        self.weights = weights;
+        self
+    }
+
+    pub fn classes(mut self, classes: HashSet<String>) -> AveragedPerceptron {
+        self.classes = classes;
+        self
     }
 
     pub fn predict(&self, features: &HashMap<String, f64>) -> String {
@@ -54,9 +49,12 @@ impl AveragedPerceptron {
             }
             let weights = &self.weights[feat];
             for (label, weight) in weights {
-                scores.get_mut(label)
+                scores
+                    .get_mut(label)
                     .map(|w| *w += (*weight as f64 * val) as f64)
-                    .unwrap_or_else(|| { scores.insert(label.to_owned(), (*weight as f64 * val) as f64); });
+                    .unwrap_or_else(|| {
+                        scores.insert(label.to_owned(), (*weight as f64 * val) as f64);
+                    });
             }
         }
 
@@ -69,15 +67,21 @@ impl AveragedPerceptron {
             .clone()
     }
 
-    pub fn update(&mut self, truth: &str, guess: &str, features: HashMap<String, f64>) {
+    pub fn update(&mut self, truth: &str, guess: &str, features: &HashMap<String, f64>) {
         self.instances += 1;
         if truth == guess {
             return;
         }
 
-        for (f, _) in features {
-            self.weights.get(&f)
-                .and_then(|weights| Some((*weights.get(truth).unwrap_or(&0.0), *weights.get(guess).unwrap_or(&0.0))))
+        for f in features.keys() {
+            self.weights
+                .get(f)
+                .and_then(|weights| {
+                    Some((
+                        *weights.get(truth).unwrap_or(&0.0),
+                        *weights.get(guess).unwrap_or(&0.0),
+                    ))
+                })
                 .and_then(|weights| {
                     self.update_feat(truth, f.as_ref(), weights.0, 1.0);
                     self.update_feat(guess, f.as_ref(), weights.1, -1.0);
@@ -97,10 +101,9 @@ impl AveragedPerceptron {
             let mut new: HashMap<String, f64> = HashMap::new();
             for (class, weight) in weights.clone() {
                 let key = format!("{}-{}", feat, class);
-                let delta = stamps.get_mut(&key)
-                    .and_then(|v| {
-                        Some(*v)
-                    })
+                let delta = stamps
+                    .get_mut(&key)
+                    .and_then(|v| Some(*v))
                     .or_else(|| {
                         let v = stamps.insert(key.to_owned(), 0.0).unwrap();
                         Some(v)
@@ -124,17 +127,17 @@ impl AveragedPerceptron {
         // TODO: Right now we're accessing the HashMap twice for everything so that we don't have
         // to constantly copy strings
         // Maybe there's a better way...
-        self.totals.get_mut(&key)
+        self.totals
+            .get_mut(&key)
             .and_then(|_| Some(()))
             .or_else(|| {
                 self.totals.insert(key.to_owned(), 0.0);
                 Some(())
             });
 
-        let delta = self.stamps.get_mut(&key)
-            .and_then(|v| {
-                Some(*v)
-            })
+        let delta = self.stamps
+            .get_mut(&key)
+            .and_then(|v| Some(*v))
             .or_else(|| {
                 let v = self.stamps.insert(key.to_owned(), 0.0).unwrap();
                 Some(v)
@@ -151,24 +154,27 @@ impl AveragedPerceptron {
                 *val = w + v;
                 Some(())
             })
-            .or_else(|| {
-                Some(())
-            });
+            .or_else(|| Some(()));
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct PerceptronTagger {
     model: AveragedPerceptron,
     tags: HashMap<String, String>,
 }
 
 impl PerceptronTagger {
+    pub fn new() -> PerceptronTagger {
+        PerceptronTagger::default()
+    }
+
     pub fn save(&self, path: &str) -> Result<(), Error> {
         let s = serialize(
             &(&self.model.weights, &self.tags, &self.model.classes),
             Infinite,
         )?;
+
         let p = Path::new(path);
         let mut f = File::create(p)?;
 
@@ -185,7 +191,7 @@ impl PerceptronTagger {
         f.read_to_string(&mut s)?;
         let (weights, tags, classes) = deserialize(s.as_bytes())?;
 
-        let m = AveragedPerceptron::new(weights, classes);
+        let m = AveragedPerceptron::new().weights(weights).classes(classes);
 
         let p = PerceptronTagger {
             model: m,
@@ -195,18 +201,11 @@ impl PerceptronTagger {
         Ok(p)
     }
 
-    pub fn empty() -> PerceptronTagger {
-        PerceptronTagger {
-            model: AveragedPerceptron::empty(),
-            tags: HashMap::new(),
-        }
-    }
-
     pub fn pos(&mut self, words: &[Token]) -> Vec<(Token, String)> {
         let mut res = vec![];
 
-        let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
-        let end = vec!["-END-".to_owned(), "-END2-".to_owned()];
+        let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
+        let end = vec![String::from("-END-"), String::from("-END2-")];
         let mut context = vec![p1.clone(), p2.clone()];
         context.extend(
             words
@@ -253,13 +252,13 @@ impl PerceptronTagger {
 
     // TODO: How to ensure we have sentences
     pub fn train(&mut self, sentences: TaggedSentences, iterations: usize) {
-        self.make_tags(&sentences);
+        self.make_tags(sentences);
         let mut ss = sentences.to_owned();
         for _ in 0..iterations {
             for sentence in &ss {
                 let (words, tags): (Vec<_>, Vec<_>) = sentence.iter().cloned().unzip();
-                let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
-                let end = vec!["-END-".to_owned(), "-END2-".to_owned()];
+                let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
+                let end = vec![String::from("-END-"), String::from("-END2-")];
                 let mut context = vec![p1.clone(), p2.clone()];
                 context.extend(
                     words
@@ -276,7 +275,7 @@ impl PerceptronTagger {
                         None => {
                             let features = Self::get_features(i, &context, word, &p1, &p2);
                             let g = self.model.predict(&features);
-                            self.model.update(&tags[i], &g, features);
+                            self.model.update(&tags[i], &g, &features);
                             g
                         }
                     };
@@ -292,9 +291,9 @@ impl PerceptronTagger {
     }
 
     // TODO: How to ensure we have sentences
-    fn make_tags(&mut self, sentences: &TaggedSentences) {
+    fn make_tags(&mut self, sentences: TaggedSentences) {
         let mut counts: HashMap<&str, HashMap<&str, usize>> = HashMap::new();
-        for sentence in *sentences {
+        for sentence in sentences {
             for &(ref word, ref tag) in *sentence {
                 let hm = counts.entry(word).or_insert_with(HashMap::new);
                 *hm.entry(tag).or_insert(0) += 1;

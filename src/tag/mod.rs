@@ -1,6 +1,8 @@
+pub mod corpus;
 pub mod perceptron;
 
 // Re-exports
+pub use self::corpus::*;
 pub use self::perceptron::*;
 
 use tokenize::*;
