@@ -201,45 +201,40 @@ impl PerceptronTagger {
         Ok(p)
     }
 
-    pub fn pos(&mut self, words: &[Token]) -> Vec<(Token, String)> {
-        let mut res = vec![];
+    pub fn pos<'a>(&mut self, words: &[Token<'a>]) -> Vec<(Token<'a>, String)> {
+        let mut res = Vec::with_capacity(words.len());
 
         let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
-        let end = vec![String::from("-END-"), String::from("-END2-")];
-        let context = vec![p1.clone(), p2.clone()]
+        let context = vec![Cow::from("-START-"), Cow::from("-START2-")]
             .into_iter()
-            .chain(
-                words
-                    .iter()
-                    .map(|x| self.normalize(x))
-                    .map(|x| x.term.into_owned()),
-            )
-            .chain(end.clone().into_iter())
+            .chain(words.iter().map(|x| self.normalize(x)).map(|x| x.term))
+            .chain(vec![Cow::from("-END-"), Cow::from("-END2-")].into_iter())
             .collect::<Vec<_>>();
 
-        let clean = vec![p1.clone(), p2.clone()]
+        let clean = vec![Cow::from(p1.clone()), Cow::from(p2.clone())]
             .into_iter()
-            .chain(words.iter().cloned().map(|x| x.term.into_owned()))
-            .chain(end.into_iter());
+            .chain(words.iter().cloned().map(|x| x.term))
+            .chain(vec![Cow::from("-END-"), Cow::from("-END2-")].into_iter());
 
         for (i, word) in clean.enumerate() {
-            let tag = match self.tags.get(&word) {
+            let tag = match self.tags.get(&*word) {
                 Some(s) => s.to_string(),
                 None => {
-                    let features = Self::get_features(i, &context, &word, &p1, &p2);
+                    let features = Self::get_features(i, &context[..], &word, &p1, &p2);
                     self.model.predict(&features)
                 }
             };
 
             if word != "-START-" || word != "-START2-" || word != "-END-" || word != "-END2-" {
                 let t = Token {
-                    term: word.to_string().into(),
+                    term: word,
                     offset: words[i - 2].offset,
                     index: words[i - 2].index,
                 };
 
-                res.push((t, tag.to_string()));
+                res.push((t, tag.to_owned()));
             }
+
             p2 = p1;
             p1 = tag;
         }
@@ -255,24 +250,18 @@ impl PerceptronTagger {
             for sentence in &ss {
                 let (words, tags): (Vec<_>, Vec<_>) = sentence.iter().cloned().unzip();
                 let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
-                let end = vec![String::from("-END-"), String::from("-END2-")];
 
-                let context = vec![p1.clone(), p2.clone()]
+                let context = vec![Cow::from("-START-"), Cow::from("-START2-")]
                     .into_iter()
-                    .chain(
-                        words
-                            .iter()
-                            .map(|x| self.normalize_str(x))
-                            .map(|x| x.into_owned()),
-                    )
-                    .chain(end.into_iter())
+                    .chain(words.iter().map(|x| self.normalize_str(x)))
+                    .chain(vec![Cow::from("-START-"), Cow::from("-START2-")].into_iter())
                     .collect::<Vec<_>>();
 
                 for (i, word) in words.iter().enumerate() {
                     let guess = match self.tags.get(word) {
                         Some(s) => s.clone(),
                         None => {
-                            let features = Self::get_features(i, &context, word, &p1, &p2);
+                            let features = Self::get_features(i, &context[..], word, &p1, &p2);
                             let g = self.model.predict(&features);
                             self.model.update(&tags[i], &g, &features);
                             g
@@ -314,7 +303,7 @@ impl PerceptronTagger {
 
     fn get_features(
         i: usize,
-        context: &[String],
+        context: &[Cow<str>],
         w: &str,
         p1: &str,
         p2: &str,
@@ -392,7 +381,7 @@ impl PerceptronTagger {
 impl Tagger for PerceptronTagger {
     type Tag = String;
 
-    fn tag(&mut self, tokens: &[Token]) -> Vec<(Token, Self::Tag)> {
+    fn tag<'a>(&mut self, tokens: &[Token<'a>]) -> Vec<(Token<'a>, Self::Tag)> {
         self.pos(&tokens[..])
     }
 }

@@ -27,7 +27,7 @@ pub trait Tokenizer<'a> {
 }
 
 /// A single token.
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct Token<'a> {
     // TODO: Maybe just give start/end offset? Make getting text a method
     /// The term of text of the token itself.

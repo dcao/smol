@@ -11,5 +11,5 @@ use tokenize::*;
 pub trait Tagger {
     type Tag;
 
-    fn tag(&mut self, tokens: &[Token]) -> Vec<(Token, Self::Tag)>;
+    fn tag<'a>(&mut self, tokens: &[Token<'a>]) -> Vec<(Token<'a>, Self::Tag)>;
 }
