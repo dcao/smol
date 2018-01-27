@@ -4,10 +4,11 @@
 //!
 //! Based on [an algorithm by Matthew Honnibal](https://github.com/jdkato/prose/blob/master/tag/aptag.go)
 
+use error::*;
 use super::*;
 
 use bincode::{deserialize, serialize, Infinite};
-use failure::Error;
+use failure::ResultExt;
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
 use std::cmp::min;
@@ -41,7 +42,7 @@ impl AveragedPerceptron {
         self
     }
 
-    pub fn predict(&self, features: &HashMap<String, f64>) -> String {
+    pub fn predict(&self, features: &HashMap<String, f64>) -> Result<String, SmolError> {
         let mut scores: HashMap<String, f64> = HashMap::new();
         for (feat, val) in features {
             if self.weights.get(feat).is_none() || *val == 0.0 {
@@ -62,9 +63,8 @@ impl AveragedPerceptron {
             .iter()
             .map(|i| ((i.1 * 100000.0) as isize, i.0))
             .max()
-            .unwrap()
-            .1
-            .clone()
+            .map(|x| x.1.clone())
+            .ok_or(SmolErrorKind::EmptyModel.into())
     }
 
     pub fn update(&mut self, truth: &str, guess: &str, features: &HashMap<String, f64>) {
@@ -169,27 +169,28 @@ impl PerceptronTagger {
         PerceptronTagger::default()
     }
 
-    pub fn save(&self, path: &str) -> Result<(), Error> {
+    pub fn save(&self, path: &str) -> Result<(), SmolError> {
         let s = serialize(
             &(&self.model.weights, &self.tags, &self.model.classes),
             Infinite,
-        )?;
+        ).context(SmolErrorKind::Serialize)?;
 
         let p = Path::new(path);
-        let mut f = File::create(p)?;
+        let mut f = File::create(p).context(SmolErrorKind::Write)?;
 
-        f.write_all(&s)?;
+        f.write_all(&s).context(SmolErrorKind::Write)?;
 
         Ok(())
     }
 
-    pub fn load(path: &str) -> Result<PerceptronTagger, Error> {
+    pub fn load(path: &str) -> Result<PerceptronTagger, SmolError> {
         let p = Path::new(path);
-        let mut f = File::open(p)?;
+        let mut f = File::open(p).context(SmolErrorKind::Write)?;
 
         let mut s = String::new();
-        f.read_to_string(&mut s)?;
-        let (weights, tags, classes) = deserialize(s.as_bytes())?;
+        f.read_to_string(&mut s).context(SmolErrorKind::Write)?;
+        let (weights, tags, classes) =
+            deserialize(s.as_bytes()).context(SmolErrorKind::Deserialize)?;
 
         let m = AveragedPerceptron::new().weights(weights).classes(classes);
 
@@ -201,7 +202,7 @@ impl PerceptronTagger {
         Ok(p)
     }
 
-    pub fn pos<'a>(&mut self, words: &[Token<'a>]) -> Vec<(Token<'a>, String)> {
+    pub fn pos<'a>(&mut self, words: &[Token<'a>]) -> Result<Vec<(Token<'a>, String)>, SmolError> {
         let mut res = Vec::with_capacity(words.len());
 
         let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
@@ -221,7 +222,7 @@ impl PerceptronTagger {
                 Some(s) => s.to_string(),
                 None => {
                     let features = Self::get_features(i, &context[..], &word, &p1, &p2);
-                    self.model.predict(&features)
+                    self.model.predict(&features)?
                 }
             };
 
@@ -239,7 +240,7 @@ impl PerceptronTagger {
             p1 = tag;
         }
 
-        res
+        Ok(res)
     }
 
     // TODO: How to ensure we have sentences
@@ -262,7 +263,7 @@ impl PerceptronTagger {
                         Some(s) => s.clone(),
                         None => {
                             let features = Self::get_features(i, &context[..], word, &p1, &p2);
-                            let g = self.model.predict(&features);
+                            let g = self.model.predict(&features).unwrap();
                             self.model.update(&tags[i], &g, &features);
                             g
                         }
@@ -381,7 +382,21 @@ impl PerceptronTagger {
 impl Tagger for PerceptronTagger {
     type Tag = String;
 
-    fn tag<'a>(&mut self, tokens: &[Token<'a>]) -> Vec<(Token<'a>, Self::Tag)> {
+    fn tag<'a>(&mut self, tokens: &[Token<'a>]) -> Result<Vec<(Token<'a>, Self::Tag)>, SmolError> {
         self.pos(&tokens[..])
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::borrow::Cow;
+
+    #[test]
+    fn perceptron_empty() {
+        let ts = vec![Token { term: Cow::Borrowed("test"), offset: 0, index: 0 }];
+        let mut pt = PerceptronTagger::new();
+
+        assert_eq!(SmolErrorKind::EmptyModel, pt.tag(&ts).err().unwrap().kind());
+    }    
 }
