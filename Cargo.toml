@@ -1,9 +1,13 @@
 [package]
 name = "smol"
-version = "0.1.0"
+description = "A smol NLP library"
+version = "0.0.1"
 authors = ["David Cao <david@teknik.io>"]
 readme = "README.md"
 license = "MIT"
+homepage = "https://github.com/cmdd/smol"
+repository = "https://github.com/cmdd/smol"
+documentation = "https://docs.rs/smol"
 
 [dependencies]
 bincode = "0.9"

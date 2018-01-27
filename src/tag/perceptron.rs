@@ -13,7 +13,6 @@ use itertools::Itertools;
 use rand::{thread_rng, Rng};
 use std::cmp::min;
 use std::collections::{HashMap, HashSet};
-use std::borrow::Cow;
 use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
@@ -206,51 +205,28 @@ impl PerceptronTagger {
         &mut self,
         words: I,
     ) -> Result<Vec<(Token<'a>, String)>, SmolError> {
-        let mut res = Vec::new();
+        let clean = words.into_iter();
 
-        let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
-        let (context, clean): (Vec<_>, Vec<_>) = vec![
-            (
-                Cow::Borrowed("-START-"),
-                Token {
-                    term: Cow::Borrowed("-START-"),
-                    offset: 0,
-                    index: 0,
-                },
-            ),
-            (
-                Cow::Borrowed("-START2-"),
-                Token {
-                    term: Cow::Borrowed("-START2-"),
-                    offset: 0,
-                    index: 0,
-                },
-            ),
-        ].into_iter()
-            .chain(words.into_iter().map(|x| (self.normalize_str(&x.term), x)))
-            .chain(
-                vec![
-                    (
-                        Cow::Borrowed("-END-"),
-                        Token {
-                            term: Cow::Borrowed("-END-"),
-                            offset: 0,
-                            index: 0,
-                        },
-                    ),
-                    (
-                        Cow::Borrowed("-END2-"),
-                        Token {
-                            term: Cow::Borrowed("-END2-"),
-                            offset: 0,
-                            index: 0,
-                        },
-                    ),
-                ].into_iter(),
-            )
-            .unzip();
+        let mut context = vec![
+            "-START-".to_owned(),
+            "-START2-".to_owned(),
+            "-END-".to_owned(),
+            "-END2-".to_owned(),
+        ];
+        let mut c = Vec::new();
+        let mut ix = 2;
 
-        for (i, word) in clean.into_iter().enumerate() {
+        for i in clean {
+            context.insert(ix, Self::normalize_str(&i.term));
+            c.push(i);
+            ix += 1;
+        }
+
+        let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
+
+        let mut res = Vec::with_capacity(c.len());
+
+        for (i, word) in c.into_iter().enumerate() {
             let tag = match self.tags.get(&*word.term) {
                 Some(s) => s.to_string(),
                 None => {
@@ -273,22 +249,23 @@ impl PerceptronTagger {
     }
 
     // TODO: How to ensure we have sentences
-    pub fn train(&mut self, mut sentences: TaggedSentences, iterations: usize) {
+    pub fn train(&mut self, mut sentences: Vec<TaggedSentence>, iterations: usize) {
         self.make_tags(&sentences);
         for _ in 0..iterations {
-            for sentence in sentences.iter_mut() {
+            for sentence in &mut sentences {
                 let (words, tags): (Vec<_>, Vec<_>) = sentence.iter().cloned().unzip();
-                let (mut p1, mut p2) = (String::from("-START-"), String::from("-START2-"));
 
-                let context = vec![Cow::Borrowed("-START-"), Cow::Borrowed("-START2-")]
+                let context = vec!["-START-".to_owned(), "-START2-".to_owned()]
                     .into_iter()
-                    .chain(words.iter().map(|x| self.normalize_str(x)))
-                    .chain(vec![Cow::Borrowed("-START-"), Cow::Borrowed("-START2-")].into_iter())
+                    .chain(words.iter().map(|x| Self::normalize_str(x)))
+                    .chain(vec!["-END-".to_owned(), "-END2-".to_owned()].into_iter())
                     .collect::<Vec<_>>();
+
+                let (mut p1, mut p2) = ("-START-".to_owned(), "-START2-".to_owned());
 
                 for (i, word) in words.iter().enumerate() {
                     let guess = match self.tags.get(word) {
-                        Some(s) => s.clone(),
+                        Some(s) => s.to_owned(),
                         None => {
                             let features = Self::get_features(i, &context[..], word, &p1, &p2);
                             let g = self.model.predict(&features).unwrap();
@@ -308,7 +285,7 @@ impl PerceptronTagger {
     }
 
     // TODO: How to ensure we have sentences
-    fn make_tags(&mut self, sentences: &TaggedSentences) {
+    fn make_tags(&mut self, sentences: &[TaggedSentence]) {
         let mut counts: HashMap<&str, HashMap<&str, usize>> = HashMap::new();
         for sentence in sentences {
             for &(ref word, ref tag) in *sentence {
@@ -332,7 +309,7 @@ impl PerceptronTagger {
 
     fn get_features(
         i: usize,
-        context: &[Cow<str>],
+        context: &[String],
         w: &str,
         p1: &str,
         p2: &str,
@@ -382,17 +359,17 @@ impl PerceptronTagger {
         *features.entry(key).or_insert(0.0) += 1.0;
     }
 
-    fn normalize_str<'a>(&self, t: &str) -> Cow<'a, str> {
+    fn normalize_str(t: &str) -> String {
         if t.find('-').is_some() && t.chars().nth(0) != Some('-') {
-            Cow::Borrowed("!HYPHEN")
+            "!HYPHEN".to_owned()
         } else if t.parse::<usize>().is_ok() {
             if t.chars().count() == 4 {
-                Cow::Borrowed("!YEAR")
+                "!YEAR".to_owned()
             } else {
-                Cow::Borrowed("!DIGIT")
+                "!DIGIT".to_owned()
             }
         } else {
-            Cow::Owned(t.to_lowercase())
+            t.to_lowercase()
         }
     }
 }

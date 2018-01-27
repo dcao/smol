@@ -1,3 +1,3 @@
 //! Functions for dealing with (tagged) corpuses.
 
-pub type TaggedSentences<'a> = Vec<&'a [(String, String)]>;
+pub type TaggedSentence<'a> = &'a [(String, String)];
