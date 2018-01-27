@@ -12,5 +12,8 @@ use tokenize::*;
 pub trait Tagger {
     type Tag;
 
-    fn tag<'a>(&mut self, tokens: &[Token<'a>]) -> Result<Vec<(Token<'a>, Self::Tag)>, SmolError>;
+    fn tag<'a, I: IntoIterator<Item = Token<'a>>>(
+        &mut self,
+        tokens: I,
+    ) -> Result<Vec<(Token<'a>, Self::Tag)>, SmolError>;
 }
